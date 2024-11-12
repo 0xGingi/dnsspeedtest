@@ -31,10 +31,16 @@ const TEST_DOMAINS: &[&str] = &[
     "cloudflare.com",
     "microsoft.com",
     "github.com",
-    "netflix.com"
+    "netflix.com",
+    "amazon.com",
+    "facebook.com",
+    "wikipedia.org",
+    "reddit.com"
 ];
 
-const TEST_ROUNDS: u32 = 3;
+const TEST_ROUNDS: u32 = 5;
+const TIMEOUT_SECS: u64 = 3;
+const COOLDOWN_MS: u64 = 100;
 
 #[derive(Debug)]
 struct TestResult {
@@ -43,21 +49,31 @@ struct TestResult {
     min_latency: Duration,
     max_latency: Duration,
     success_rate: f64,
+    failed_domains: Vec<String>,
+    median_duration: Duration,
 }
 
 async fn measure_latency(addr: &str) -> Option<Duration> {
     let start = Instant::now();
-    if let Ok(mut stream) = tokio::net::TcpStream::connect(format!("{}:53", addr)).await {
-        let _ = stream.shutdown().await;
-        Some(start.elapsed())
-    } else {
-        None
+    match tokio::time::timeout(
+        Duration::from_secs(TIMEOUT_SECS),
+        tokio::net::TcpStream::connect(format!("{}:53", addr))
+    ).await {
+        Ok(Ok(mut stream)) => {
+            let _ = stream.shutdown().await;
+            Some(start.elapsed())
+        },
+        _ => None
     }
 }
 
 async fn test_dns_speed(provider: &DnsProvider) -> TestResult {
     let mut opts = ResolverOpts::default();
-    opts.timeout = Duration::from_secs(5);
+    opts.timeout = Duration::from_secs(TIMEOUT_SECS);
+    opts.attempts = 1;
+    opts.use_hosts_file = false;
+    opts.cache_size = 0;
+    opts.edns0 = false;
     
     let socket_addr = format!("{}:53", provider.ip)
         .parse::<SocketAddr>()
@@ -73,45 +89,59 @@ async fn test_dns_speed(provider: &DnsProvider) -> TestResult {
     );
 
     let resolver = TokioAsyncResolver::tokio(config, opts);
-    let mut total_duration = Duration::default();
-    let mut successful_queries = 0;
+    let mut durations = Vec::new();
+    let mut failed_domains = Vec::new();
     let mut total_queries = 0;
-    let mut min_latency = Duration::from_secs(5);
-    let mut max_latency = Duration::default();
-
-    if let Some(latency) = measure_latency(provider.ip).await {
-        min_latency = latency;
-        max_latency = latency;
-    }
 
     let _ = resolver.lookup_ip(Name::from_ascii("example.com").unwrap()).await;
-    sleep(Duration::from_millis(100)).await;
+    sleep(Duration::from_millis(COOLDOWN_MS)).await;
 
-    for _ in 0..TEST_ROUNDS {
+    for round in 0..TEST_ROUNDS {
         for domain in TEST_DOMAINS {
             total_queries += 1;
-            let query_start = Instant::now();
             
-            match resolver.lookup_ip(Name::from_ascii(domain).unwrap()).await {
-                Ok(_) => {
-                    let duration = query_start.elapsed();
-                    total_duration += duration;
-                    successful_queries += 1;
-                    min_latency = min_latency.min(duration);
-                    max_latency = max_latency.max(duration);
-                },
-                Err(_) => continue,
+            let tcp_latency = measure_latency(provider.ip).await;
+            if tcp_latency.is_none() {
+                failed_domains.push(format!("{} (TCP Failed)", domain));
+                continue;
             }
             
-            sleep(Duration::from_millis(50)).await;
+            let query_start = Instant::now();
+            match resolver.lookup_ip(Name::from_ascii(domain).unwrap()).await {
+                Ok(_) => {
+                    durations.push(query_start.elapsed());
+                },
+                Err(_) => {
+                    failed_domains.push(domain.to_string());
+                }
+            }
+            
+            sleep(Duration::from_millis(COOLDOWN_MS)).await;
+        }
+
+        if round < TEST_ROUNDS - 1 {
+            sleep(Duration::from_millis(COOLDOWN_MS * 2)).await;
         }
     }
 
+    durations.sort();
+    let successful_queries = durations.len();
     let success_rate = (successful_queries as f64) / (total_queries as f64) * 100.0;
-    let avg_duration = if successful_queries > 0 {
-        total_duration / successful_queries
+
+    let avg_duration = if !durations.is_empty() {
+        Duration::from_secs_f64(
+            durations.iter().map(|d| d.as_secs_f64()).sum::<f64>() / successful_queries as f64
+        )
     } else {
-        Duration::from_secs(5)
+        Duration::from_secs(TIMEOUT_SECS)
+    };
+
+    let min_latency = durations.first().copied().unwrap_or(Duration::from_secs(TIMEOUT_SECS));
+    let max_latency = durations.last().copied().unwrap_or(Duration::from_secs(TIMEOUT_SECS));
+    let median_duration = if !durations.is_empty() {
+        durations[durations.len() / 2]
+    } else {
+        Duration::from_secs(TIMEOUT_SECS)
     };
 
     TestResult {
@@ -120,12 +150,14 @@ async fn test_dns_speed(provider: &DnsProvider) -> TestResult {
         min_latency,
         max_latency,
         success_rate,
+        failed_domains,
+        median_duration,
     }
 }
 
 #[tokio::main]
 async fn main() {
-    println!("Testing DNS query speeds...\n");
+    println!("DNS Speed Test (Testing {} domains × {} rounds)\n", TEST_DOMAINS.len(), TEST_ROUNDS);
 
     let mut results = Vec::new();
     
@@ -133,36 +165,45 @@ async fn main() {
         print!("Testing {}... ", provider.name);
         let result = test_dns_speed(provider).await;
         println!("{:.2} ms (Success rate: {:.1}%)", 
-            result.avg_duration.as_secs_f64() * 1000.0,
+            result.median_duration.as_secs_f64() * 1000.0,
             result.success_rate
         );
         results.push(result);
     }
 
-    results.sort_by(|a, b| a.avg_duration.cmp(&b.avg_duration));
+    results.sort_by(|a, b| a.median_duration.cmp(&b.median_duration));
 
-    println!("\nDetailed Results (sorted by speed):");
-    println!("{:-<75}", "");
-    println!("{:<15} {:>10} {:>12} {:>12} {:>15}", 
-        "Provider", "Avg (ms)", "Min (ms)", "Max (ms)", "Success Rate");
-    println!("{:-<75}", "");
+    println!("\nDetailed Results (sorted by median speed):");
+    println!("{:-<90}", "");
+    println!("{:<15} {:>10} {:>10} {:>12} {:>12} {:>15}", 
+        "Provider", "Median", "Avg (ms)", "Min (ms)", "Max (ms)", "Success Rate");
+    println!("{:-<90}", "");
     
     for result in &results {
         println!(
-            "{:<15} {:>10.2} {:>12.2} {:>12.2} {:>14.1}%",
+            "{:<15} {:>10.2} {:>10.2} {:>12.2} {:>12.2} {:>14.1}%",
             result.provider,
+            result.median_duration.as_secs_f64() * 1000.0,
             result.avg_duration.as_secs_f64() * 1000.0,
             result.min_latency.as_secs_f64() * 1000.0,
             result.max_latency.as_secs_f64() * 1000.0,
             result.success_rate
         );
+
+        if !result.failed_domains.is_empty() {
+            println!("    Failed domains: {}", result.failed_domains.join(", "));
+        }
     }
 
     if let Some(fastest) = results.first() {
-        println!("\nFastest DNS provider: {} ({:.2} ms, {:.1}% success rate)",
+        println!("\nFastest DNS provider: {} ({:.2} ms median, {:.1}% success rate)",
             fastest.provider,
-            fastest.avg_duration.as_secs_f64() * 1000.0,
+            fastest.median_duration.as_secs_f64() * 1000.0,
             fastest.success_rate
         );
     }
+
+    println!("\nPress Enter to exit...");
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input).unwrap();
 }

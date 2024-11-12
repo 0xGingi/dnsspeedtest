@@ -92,7 +92,7 @@ dependencies = [
 
 [[package]]
 name = "dns_speed_test"
-version = "0.1.0"
+version = "1.1.0"
 dependencies = [
  "futures",
  "hickory-resolver",
