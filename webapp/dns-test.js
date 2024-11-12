@@ -1,5 +1,5 @@
 const DNS_PROVIDERS = [
-    { name: "Google", endpoint: "https://dns.google/dns-query" },
+    { name: "Google", endpoint: "https://dns.google/resolve" },
     { name: "Cloudflare", endpoint: "https://cloudflare-dns.com/dns-query" },
     { name: "Quad9", endpoint: "https://dns.quad9.net/dns-query" },
     { name: "OpenDNS", endpoint: "https://doh.opendns.com/dns-query" },

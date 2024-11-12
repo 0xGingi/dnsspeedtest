@@ -17,11 +17,16 @@ app.get('/proxy', async (req, res) => {
     console.log('Proxying request to:', url);
 
     try {
+        const headers = {
+            'Accept': 'application/dns-json',
+        };
+
+        if (!url.includes('dns.google')) {
+            headers['Content-Type'] = 'application/dns-json';
+        }
+
         const response = await fetch(url, {
-            headers: {
-                'Accept': 'application/dns-json',
-                'Content-Type': 'application/dns-json',
-            },
+            headers,
             method: 'GET',
         });
         
