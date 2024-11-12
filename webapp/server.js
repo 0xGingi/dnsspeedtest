@@ -19,13 +19,16 @@ app.get('/proxy', async (req, res) => {
     try {
         const response = await fetch(url, {
             headers: {
-                'accept': 'application/dns-json',
-                'content-type': 'application/dns-json',
-            }
+                'Accept': 'application/dns-json',
+                'Content-Type': 'application/dns-json',
+            },
+            method: 'GET',
         });
         
         if (!response.ok) {
             console.error('DNS server responded with:', response.status, response.statusText);
+            const text = await response.text();
+            console.error('Response body:', text);
             return res.status(response.status).json({ 
                 error: `DNS server responded with: ${response.status} ${response.statusText}` 
             });

@@ -62,7 +62,8 @@ class TestResult {
 async function measureDNSLatency(domain, endpoint) {
     const startTime = performance.now();
     try {
-        const proxyUrl = `/proxy?url=${encodeURIComponent(`${endpoint}?name=${domain}&type=A`)}`;
+        const dnsQuery = `${endpoint}?name=${domain}&type=A&ct=application/dns-json`;
+        const proxyUrl = `/proxy?url=${encodeURIComponent(dnsQuery)}`;
         console.log('Requesting:', proxyUrl);
         
         const response = await fetch(proxyUrl);
