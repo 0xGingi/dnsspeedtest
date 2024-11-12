@@ -63,15 +63,20 @@ async function measureDNSLatency(domain, endpoint) {
     const startTime = performance.now();
     try {
         const proxyUrl = `/proxy?url=${encodeURIComponent(`${endpoint}?name=${domain}&type=A`)}`;
-        const response = await fetch(proxyUrl, {
-            headers: {
-                'accept': 'application/json',
-            },
-            method: 'GET',
-        });
+        console.log('Requesting:', proxyUrl);
         
-        if (!response.ok) throw new Error('DNS query failed');
-        await response.json();
+        const response = await fetch(proxyUrl);
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'DNS query failed');
+        }
+        
+        const data = await response.json();
+        if (!data || data.error) {
+            throw new Error(data.error || 'Invalid DNS response');
+        }
+        
         return performance.now() - startTime;
     } catch (error) {
         console.error(`Error querying ${domain} using ${endpoint}:`, error);
