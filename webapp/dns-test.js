@@ -1,13 +1,13 @@
 const DNS_PROVIDERS = [
     { name: "Google", endpoint: "https://dns.google/resolve" },
     { name: "Cloudflare", endpoint: "https://cloudflare-dns.com/dns-query" },
-    { name: "Quad9", endpoint: "https://dns.quad9.net/dns-query" },
-    { name: "OpenDNS", endpoint: "https://doh.opendns.com/dns-query" },
-    { name: "AdGuard", endpoint: "https://dns.adguard-dns.com/dns-query" },
-    { name: "Mullvad", endpoint: "https://dns.mullvad.net/dns-query" },
+    //{ name: "Quad9", endpoint: "https://dns.quad9.net/dns-query" },
+    //{ name: "OpenDNS", endpoint: "https://doh.opendns.com/dns-query" },
+    //{ name: "AdGuard", endpoint: "https://dns.adguard-dns.com/dns-query" },
+    //{ name: "Mullvad", endpoint: "https://dns.mullvad.net/dns-query" },
     { name: "DNS0", endpoint: "https://zero.dns0.eu/dns-query" },
     { name: "NextDNS", endpoint: "https://dns.nextdns.io/" },
-    { name: "ControlD", endpoint: "https://dns.controld.com/comss" }
+    //{ name: "ControlD", endpoint: "https://dns.controld.com/comss" }
 ];
 
 const TEST_DOMAINS = [
@@ -59,10 +59,20 @@ class TestResult {
     }
 }
 
-async function measureDNSLatency(domain, endpoint) {
+async function measureDNSLatency(domain, provider) {
     const startTime = performance.now();
     try {
-        const dnsQuery = `${endpoint}?name=${domain}&type=A&ct=application/dns-json`;
+        let dnsQuery;
+        if (provider.endpoint.includes('dns.google')) {
+            dnsQuery = `${provider.endpoint}?name=${domain}&type=A`;
+        } else if (provider.format === 'dns') {
+            dnsQuery = `${provider.endpoint}?dns=${domain}&type=A`;
+        } else if (provider.format === 'wire') {
+            return null;
+        } else {
+            dnsQuery = `${provider.endpoint}?name=${domain}&type=A&ct=application/dns-json`;
+        }
+
         const proxyUrl = `/proxy?url=${encodeURIComponent(dnsQuery)}`;
         console.log('Requesting:', proxyUrl);
         
@@ -80,7 +90,7 @@ async function measureDNSLatency(domain, endpoint) {
         
         return performance.now() - startTime;
     } catch (error) {
-        console.error(`Error querying ${domain} using ${endpoint}:`, error);
+        console.error(`Error querying ${domain} using ${provider.name}:`, error);
         return null;
     }
 }
