@@ -65,10 +65,6 @@ async function measureDNSLatency(domain, provider) {
         let dnsQuery;
         if (provider.endpoint.includes('dns.google')) {
             dnsQuery = `${provider.endpoint}?name=${domain}&type=A`;
-        } else if (provider.format === 'dns') {
-            dnsQuery = `${provider.endpoint}?dns=${domain}&type=A`;
-        } else if (provider.format === 'wire') {
-            return null;
         } else {
             dnsQuery = `${provider.endpoint}?name=${domain}&type=A&ct=application/dns-json`;
         }
@@ -98,7 +94,7 @@ async function measureDNSLatency(domain, provider) {
 async function testDNSSpeed(provider, updateProgress) {
     const result = new TestResult(provider.name);
 
-    await measureDNSLatency("example.com", provider.endpoint);
+    await measureDNSLatency("example.com", provider);
     await new Promise(resolve => setTimeout(resolve, COOLDOWN_MS));
 
     for (let round = 0; round < TEST_ROUNDS; round++) {
@@ -106,7 +102,7 @@ async function testDNSSpeed(provider, updateProgress) {
             result.totalQueries++;
             updateProgress(`Testing ${provider.name}: ${domain} (Round ${round + 1}/${TEST_ROUNDS})`);
 
-            const duration = await measureDNSLatency(domain, provider.endpoint);
+            const duration = await measureDNSLatency(domain, provider);
             if (duration === null) {
                 result.failedDomains.push(domain);
             } else {
