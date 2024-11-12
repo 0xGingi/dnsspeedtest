@@ -16,14 +16,13 @@ A fast, lightweight DNS resolver benchmarking tool written in Rust that measures
 1. Make sure you have Rust installed on your system
 2. Clone this repository
 ```
-
-        git clone https://github.com/0xgingi/dnspeedtest
-        cd dnspeedtest
+git clone https://github.com/0xgingi/dnspeedtest
+cd dnspeedtest
 ```
 3. Build and run:
 ```
-        cargo build --release
-        cargo run
+cargo build --release
+cargo run
 ```
 ## Configuration
 
