@@ -1,9 +1,12 @@
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
+const path = require('path');
 const app = express();
 
 app.use(cors());
+
+app.use(express.static('.'));
 
 app.get('/proxy', async (req, res) => {
     const { url } = req.query;
@@ -27,5 +30,5 @@ app.get('/proxy', async (req, res) => {
 
 const PORT = process.env.PORT || 3200;
 app.listen(PORT, () => {
-    console.log(`Proxy server running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
