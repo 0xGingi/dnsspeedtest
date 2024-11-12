@@ -2,5 +2,6 @@ services:
   dnsspeedtest:
     build: .
     ports:
+      - "3200:3200"
       - "8077:8077"
     restart: unless-stopped

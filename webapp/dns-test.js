@@ -62,13 +62,12 @@ class TestResult {
 async function measureDNSLatency(domain, endpoint) {
     const startTime = performance.now();
     try {
-        const response = await fetch(`${endpoint}?name=${domain}&type=A`, {
+        const proxyUrl = `/proxy?url=${encodeURIComponent(`${endpoint}?name=${domain}&type=A`)}`;
+        const response = await fetch(proxyUrl, {
             headers: {
-                'accept': 'application/dns-json',
-                'content-type': 'application/dns-json',
+                'accept': 'application/json',
             },
             method: 'GET',
-            mode: 'cors',
         });
         
         if (!response.ok) throw new Error('DNS query failed');
