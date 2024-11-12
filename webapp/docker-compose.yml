@@ -1,0 +1,8 @@
+version: '3.8'
+
+services:
+  dnsspeedtest:
+    build: .
+    ports:
+      - "8077:8077"
+    restart: unless-stopped
